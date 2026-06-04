@@ -14,44 +14,48 @@ class CastDiscoveryService {
     return _instance;
   }
 
-  Future<List<CastDevice>> search({Duration timeout = const Duration(seconds: 5)}) async {
+  Future<List<CastDevice>> search(
+      {Duration timeout = const Duration(seconds: 5)}) async {
     final results = <CastDevice>[];
 
     final discovery = BonsoirDiscovery(type: _domain);
-    await discovery.ready;
+    await discovery.initialize();
 
     discovery.eventStream!.listen((event) {
-      if (event.type == BonsoirDiscoveryEventType.discoveryServiceFound) {
-        event.service?.resolve(discovery.serviceResolver);
-      } else if (event.type == BonsoirDiscoveryEventType.discoveryServiceResolved) {
-        if (event.service == null || event.service?.attributes == null) {
-          return;
-        }
+      switch (event) {
+        case BonsoirDiscoveryServiceFoundEvent():
+          event.service.resolve(discovery.serviceResolver);
 
-        final port = event.service?.port;
-        final host = event.service?.toJson()['service.ip'] ?? event.service?.toJson()['service.host'];
+        case BonsoirDiscoveryServiceResolvedEvent():
+          final port = event.service.port;
+          final host = event.service.toJson()['service.ip'] ??
+              event.service.toJson()['service.host'];
 
-        String name = [
-          event.service?.attributes?['md'],
-          event.service?.attributes?['fn'],
-        ].whereType<String>().join(' - ');
-        if (name.isEmpty) {
-          name = event.service!.name;
-        }
+          String name = [
+            event.service.attributes['md'],
+            event.service.attributes['fn'],
+          ].whereType<String>().join(' - ');
+          if (name.isEmpty) {
+            name = event.service.name;
+          }
 
-        if (port == null || host == null) {
-          return;
-        }
+          if (host == null) {
+            return;
+          }
 
-        results.add(
-          CastDevice(
-            serviceName: event.service!.name,
-            name: name,
-            port: port,
-            host: host,
-            extras: event.service!.attributes ?? {},
-          ),
-        );
+          results.add(
+            CastDevice(
+              serviceName: event.service.name,
+              name: name,
+              port: port,
+              host: host,
+              extras: event.service.attributes,
+            ),
+          );
+          break;
+        default:
+          print('Another event occurred : $event.');
+          break;
       }
     }, onError: (error) {
       print('[CastDiscoveryService] error ${error.runtimeType} - $error');
